@@ -1,8 +1,15 @@
 #ifndef sm130_h
 #define sm130_h
 
+#if defined(ARDUINO) && ARDUINO >= 100
+  #include "Arduino.h"
+  #else
+  #include "WProgram.h"
+  #endif
 #include <inttypes.h>
 #include <SoftwareSerial.h>
+
+#define STANDARD_DELAY 100
 
 enum nfc_command_t {
   NFC_NONE = 0,
@@ -27,6 +34,7 @@ enum nfc_command_t {
   NFC_SLEEP = 0x96,
 };
 
+// Abstract Interface class
 class IInterfaceAdapter {
 public:
   virtual void send(nfc_command_t command, uint8_t *data, int len) = 0;
@@ -34,6 +42,7 @@ public:
   virtual int receive(nfc_command_t command, uint8_t *data) = 0;
 };
 
+// UART child class
 class UARTInterfaceAdapter : public IInterfaceAdapter {
 private:
 public:
@@ -83,6 +92,7 @@ struct Block {
   uint8_t data[16];
 };
 
+// 
 class NFCReader {
 private:
   IInterfaceAdapter *_adapter;
@@ -93,17 +103,17 @@ public:
   uint8_t available();
   
   void reset();
-  void get_firmware_version();
-  void select();
-  void seek();
-  void authenticate(int block_num, key_type_t type, uint8_t *key);
-  void read_block(int block_num);
-  void halt();
+  int get_firmware_version(uint8_t *buf);
+  status_code_t select(Tag *tag);
+  status_code_t seek(Tag *tag);
+  // void authenticate(int block_num, key_type_t type, uint8_t *key);
+  // void read_block(int block_num);
+  // void halt();
   
   int receive_raw(uint8_t *buf);
-  status_code_t receive_status();
   status_code_t receive_tag(Tag *tag);
-  status_code_t receive_block(Block *block);
+  // status_code_t receive_status();
+  // status_code_t receive_block(Block *block);
 };
 
 #endif

@@ -7,14 +7,13 @@ NFCReader reader(&adapter);
 void setup() {
   Serial.begin(19200);
   adapter.begin(19200);
-  delay(500);
+  
   Serial.println("Initialized");
+
   // Print firmware version
-  reader.get_firmware_version();
   Serial.print("Firmware Version :");
   char buf[10];
-  delay(1000);
-  int len = reader.receive_raw((uint8_t*)buf);
+  int len = reader.get_firmware_version((uint8_t*)buf);
   buf[len] = 0;
   Serial.println(buf);
 }
@@ -22,12 +21,9 @@ void setup() {
 void loop() {
   Tag tag;
   status_code_t stat;
-  char *readableStatus[100];
 
-  reader.seek();
-  delay(100);
-  stat = reader.receive_tag(&tag);
-  delay(100);
+  stat = reader.seek(&tag);
+
   if(stat == STATUS_SUCCESS) {
     Serial.print("Detected tag with type: ");
     Serial.print(tag.type, HEX);
@@ -41,5 +37,3 @@ void loop() {
   }
   delay(250);
 }
-
-
