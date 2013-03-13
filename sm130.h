@@ -93,7 +93,7 @@ public:
   uint8_t available();
   
   void reset();
-  void get_firmware_version();
+  void get_firmware_version(uint8_t *buf);
   void select();
   void seek();
   void authenticate(int block_num, key_type_t type, uint8_t *key);
