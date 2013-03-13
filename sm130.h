@@ -62,6 +62,7 @@ public:
   // Create a new NFC Reader
   NFCReader(int inpin, int outpin);
 
+  // Begin communicating over UART (must be called);
   void begin();
 
   // Check if the adapter is available for commands

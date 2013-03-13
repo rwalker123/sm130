@@ -4,6 +4,14 @@
 uint32_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
 
 
+/**************************************************************************/
+/*! 
+    @brief  Created an NFCReader object
+
+    @param  inpin   Pin for receiving data from sm130
+    @param  outpin  Pin for sending data to sm130
+*/
+/**************************************************************************/
 NFCReader::NFCReader(int inpin, int outpin): _nfc(inpin, outpin) {}
 
 /* Packet Configuration 
@@ -21,6 +29,16 @@ DATA
 CHECKSUM (All bytes except header)
 
 */
+
+/**************************************************************************/
+/*! 
+    @brief  Function for sending raw data from sm130 over UART
+
+    @param  command  Specific command being requested of sm130
+    @param  data     Buffer to store response from server into
+    @param  length   Number of bytes of data
+*/
+/**************************************************************************/
 void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
 
   // Save this command
@@ -53,7 +71,13 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
   delay(100);
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Function for receiving raw data from sm130 over UART
 
+    @param  data  Buffer to store response from server into
+*/
+/**************************************************************************/
 uint8_t NFCReader::receive(uint32_t *data) {
 
   // Initialize the checksum
@@ -97,6 +121,11 @@ uint8_t NFCReader::receive(uint32_t *data) {
   return len - 1;
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Begins communicating on a UART channel
+*/
+/**************************************************************************/
 void NFCReader::begin() {
 
   // Using a constant rate to match the API
@@ -104,11 +133,20 @@ void NFCReader::begin() {
    _nfc.begin(19200);
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Returns whether or not the UART connection is available
+*/
+/**************************************************************************/
 uint8_t NFCReader::available() {
   return _nfc.available();
 }
 
-
+/**************************************************************************/
+/*! 
+    @brief  Performs a software reset on the device
+*/
+/**************************************************************************/
 void NFCReader::reset() {
   // Write the reset command
   send(NFC_RESET, 0, 0);
@@ -117,6 +155,11 @@ void NFCReader::reset() {
   delay(STANDARD_DELAY);
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Returns the components of the firmware in an int32_t
+*/
+/**************************************************************************/
 uint32_t NFCReader::getFirmwareVersion() {
 
   uint32_t response;
@@ -145,6 +188,15 @@ uint32_t NFCReader::getFirmwareVersion() {
   
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Waits until we have a tag to report then returns the uuid
+
+    @param  target   The baud rate of the target. Not currently used
+    @param  uid      Pointer a buffer that will have the uuid stored into it
+    @param  length   Length in bytes
+*/
+/**************************************************************************/
 uint8_t NFCReader::readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length) {
 
   // Write the command to select next tag in field
@@ -157,9 +209,18 @@ uint8_t NFCReader::readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *l
   return receive_tag(uid, length);
 }
 
+/**************************************************************************/
+/*! 
+    @brief  Helper function to accepts a tag and returns the UUID and 
+            length of the UUID
+
+    @param  uid      Pointer a buffer that will have the uuid stored into it
+    @param  length   Length in bytes
+*/
+/**************************************************************************/
 uint8_t NFCReader::receive_tag(uint8_t *uid, uint8_t *length) {
 
-
+  // Clear out the packet buffer for safety
   memset(sm130_packetbuffer, '\0', sm130_PACKBUFFSIZE);
 
   // Grab the response from the adapter
