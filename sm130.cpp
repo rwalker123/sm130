@@ -1,100 +1,224 @@
 #include "sm130.h"
 
+#define sm130_PACKBUFFSIZE 36
+uint32_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
 
-NFCReader::NFCReader(IInterfaceAdapter *adapter) : _adapter(adapter){}
 
-int NFCReader::receive_raw(uint8_t *buf) {
-  
-  // Delegate receiving to implemented adapter class
-  return _adapter->receive(_last_command, buf);
-}
+NFCReader::NFCReader(int inpin, int outpin): _nfc(inpin, outpin) {}
 
-void NFCReader::write_raw(nfc_command_t command, uint8_t *buf, int len) {
+/* Packet Configuration 
 
-  // Save this command so we can reference when we receive the response
+HEADER (ALWAYS 0xFF)
+---------------------------------
+RESERVED (ALWAYS 0x00)
+---------------------------------
+LENGTH (data length + command)
+---------------------------------
+COMMAND
+---------------------------------
+DATA
+---------------------------------
+CHECKSUM (All bytes except header)
+
+*/
+void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
+
+  // Save this command
   _last_command = command;
 
-  // Send the command to the sm130 using the delegated adaptor class
-  _adapter->send(command, buf, len);
+  // Init checksum (length + command )
+  uint8_t checksum = len + 1 + command;
+
+  // Write header
+  _nfc.write(0xFF);
+
+  // Write reserved
+  _nfc.write((byte)0x00);
+
+  // Write length
+  _nfc.write(len + 1);
+
+  // Write command
+  _nfc.write(command);
+
+  // Write each data bit
+  for(int i = 0; i < len; i++) {
+    checksum += data[i];
+    _nfc.write(data[i]);
+  }
+
+  // Send up checksum
+  _nfc.write(checksum);
+
+  delay(100);
 }
+
+
+uint8_t NFCReader::receive(uint32_t *data) {
+
+  // Initialize the checksum
+  uint8_t checksum = 0;
+
+  // Wait until we get the header byte
+  while(_nfc.read() != 0xFF);
+
+  // If the next byte isn't reserved, something is wrong
+  if(_nfc.read() != 0x00) {
+    return -1;
+  }
+
+  // Read the length byte
+  int len = _nfc.read();
+
+  // Add that to the checksum
+  checksum += len;
+
+  // Read the command we're responding to
+  int command_in = _nfc.read();
+
+  // Add that to the checksum
+  checksum += command_in;
+
+  // If it's not for the command we requested, return
+  if(command_in != _last_command)
+    return -1;
+
+  // Grab all the data bytes
+  for(int i = 0; i < len - 1; i++) {
+    data[i] = _nfc.read();
+    checksum += data[i];
+  }
+
+  // Confirm the checksum
+  int checksum_in = _nfc.read();
+  if(checksum_in != checksum)
+    return -1;
+
+  return len - 1;
+}
+
+void NFCReader::begin() {
+
+  // Using a constant rate to match the API
+  // of Lady Adafruit's library which uses I2C
+   _nfc.begin(19200);
+}
+
+uint8_t NFCReader::available() {
+  return _nfc.available();
+}
+
 
 void NFCReader::reset() {
   // Write the reset command
-  write_raw(NFC_RESET, 0, 0);
+  send(NFC_RESET, 0, 0);
 
   // Wait a bit for safety
   delay(STANDARD_DELAY);
 }
 
-int NFCReader::get_firmware_version(uint8_t *buf) {
+uint32_t NFCReader::getFirmwareVersion() {
+
+  uint32_t response;
 
   // Write the command to get firmware
-  write_raw(NFC_GET_FIRMWARE, 0, 0);
+  send(NFC_GET_FIRMWARE, 0, 0);
 
   // Delay for processing safety
   delay(STANDARD_DELAY);
 
-  // Get the response
-  return receive_raw(buf);
+  memset(sm130_packetbuffer, '\0',sm130_PACKBUFFSIZE);
+
+  if (!receive(sm130_packetbuffer)) {
+    return 0;
+  }
+
+  response = sm130_packetbuffer[3];
+  response <<= 8;
+  response |= sm130_packetbuffer[4];
+  response <<= 8;
+  response |= sm130_packetbuffer[5];
+  response <<= 8;
+  response |= sm130_packetbuffer[6];
+
+  return response;
+  
 }
 
-status_code_t NFCReader::select(Tag *tag) {
-
-  // Write the command to select current tag in field
-  write_raw(NFC_SELECT, 0, 0);
-
-  // Delay for processing safety
-  delay(STANDARD_DELAY);
-
-
-  // Get the response
-  return receive_tag(tag);
-
-}
-
-status_code_t NFCReader::seek(Tag *tag) {
+uint8_t NFCReader::readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length) {
 
   // Write the command to select next tag in field
-  write_raw(NFC_SEEK, 0, 0);
+  send(NFC_SEEK, 0, 0);
 
   // Delay for processing safety
   delay(STANDARD_DELAY);
 
   // Get the response
-  return receive_tag(tag);
+  return receive_tag(uid, length);
 }
 
-status_code_t NFCReader::receive_tag(Tag *tag) {
+uint8_t NFCReader::receive_tag(uint8_t *uid, uint8_t *length) {
 
-  // Create a buffer for the response
-  uint8_t buf[8];
+
+  memset(sm130_packetbuffer, '\0', sm130_PACKBUFFSIZE);
 
   // Grab the response from the adapter
-  int len = receive_raw(buf);
+  uint8_t len = receive(sm130_packetbuffer);
 
   // If we got a response with a negative length
   // then there was an error
-  if(len < 0) {
-    return STATUS_INVALID_RESPONSE;
+  if(len <= 0) {
+    return 0;
   } 
   // If the length is one
   // Something weird happened
-  else if(len == 1) {
-    return (status_code_t)buf[0];
+  else if(len == 1 || len == 0xFF) {
+    return 0;
   } 
 
   // Else, parse the tag info 
   else {
-    // Tag type is the first byte
-    tag->type = (tag_type_t)buf[0];
 
-    // The size is the rest of the packet
-    tag->serial_size = len - 1;
+    // // The size is the rest of the packet
+    *length = len - 1;
 
     // Copy the UUID into the buffer
-    memcpy(tag->serial, buf + 1, tag->serial_size);
+    for (int i = 0; i < *length; i++) {
+
+      uid[i] = sm130_packetbuffer[i + 1];
+    }
 
     // Return success
-    return STATUS_SUCCESS;
+    return 1;
   }
+
+  return 1;
 }
+
+/**************************************************************************/
+/*! 
+    @brief  Prints a hexadecimal value in plain characters
+
+    @param  data      Pointer to the byte data
+    @param  numBytes  Data length in bytes
+*/
+/**************************************************************************/
+void NFCReader::PrintHex(const byte * data, const uint32_t numBytes)
+{
+  uint32_t szPos;
+  for (szPos=0; szPos < numBytes; szPos++) 
+  {
+    Serial.print("0x");
+    // Append leading 0 for small values
+    if (data[szPos] <= 0xF)
+      Serial.print("0");
+    Serial.print(data[szPos]&0xff, HEX);
+    if ((numBytes > 1) && (szPos != numBytes - 1))
+    {
+      Serial.print(" ");
+    }
+  }
+  Serial.println("");
+}
+
+

@@ -34,37 +34,8 @@ enum nfc_command_t {
   NFC_SLEEP = 0x96,
 };
 
-// Abstract Interface class
-class IInterfaceAdapter {
-public:
-  virtual void send(nfc_command_t command, uint8_t *data, int len) = 0;
-  virtual uint8_t available() = 0;
-  virtual int receive(nfc_command_t command, uint8_t *data) = 0;
-};
-
-// UART child class of Interface
-class UARTInterfaceAdapter : public IInterfaceAdapter {
-private:
-public:
-  SoftwareSerial _nfc;
-  UARTInterfaceAdapter(int inpin, int outpin);
-  void begin(int rate);
-  virtual void send(nfc_command_t command, uint8_t *data, int len);
-  virtual uint8_t available();
-  virtual int receive(nfc_command_t command, uint8_t *data);
-};
-
-enum tag_type_t {
-  TAG_TYPE_ULTRALIGHT = 0x01,
-  TAG_TYPE_1K = 0x02,
-  TAG_TYPE_4K = 0x03,
-  TAG_TYPE_UNKNOWN = 0x04,
-};
-
-struct Tag {
-  tag_type_t type;
-  int serial_size;
-  uint8_t serial[7];
+enum target_t {
+  PN532_MIFARE_ISO14443A = 0x01,
 };
 
 enum status_code_t {
@@ -79,31 +50,19 @@ enum status_code_t {
   STATUS_LOGIN_FAILED = 0x55,
 };
 
-enum key_type_t {
-  KEY_TYPE_A = 0xAA,
-  KEY_TYPE_B = 0xBB,
-  KEY_TRANSPORT = 0xFF,
-  KEY_TYPE_A_STORED = 0x10,
-  KEY_TYPE_B_STORED = 0x20,
-};
-
-struct Block {
-  int block_num;
-  uint8_t data[16];
-};
-
-// Child Class of UART interface
 class NFCReader {
 private:
-  IInterfaceAdapter *_adapter;
+  SoftwareSerial _nfc;
   nfc_command_t _last_command;
-  void write_raw(nfc_command_t command, uint8_t *buf, int len);
-  int receive_raw(uint8_t *buf);
-  status_code_t receive_tag(Tag *tag);
+  void send(nfc_command_t command, uint8_t *data, int len);
+  uint8_t receive(uint32_t *data);
+  uint8_t receive_tag(uint8_t *uid, uint8_t *length);
 public:
 
   // Create a new NFC Reader
-  NFCReader(IInterfaceAdapter *adapter);
+  NFCReader(int inpin, int outpin);
+
+  void begin();
 
   // Check if the adapter is available for commands
   uint8_t available();
@@ -112,13 +71,12 @@ public:
   void reset();
 
   // Get the version of the firmware (generally a good test to see if UART is working)
-  int get_firmware_version(uint8_t *buf);
-
-  // Grab whatever tag is currently in the field
-  status_code_t select(Tag *tag);
+  uint32_t getFirmwareVersion();
 
   // Wait until a tag enters the field and grab the details
-  status_code_t seek(Tag *tag);
+  uint8_t readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length);
+
+  void PrintHex(const byte * data, const uint32_t numBytes);
 };
 
 #endif
