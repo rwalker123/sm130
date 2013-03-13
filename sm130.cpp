@@ -1,195 +1,100 @@
 #include "sm130.h"
 
-NFCReader::NFCReader(IInterfaceAdapter *adapter) : _adapter(adapter) {
-  _last_command = NFC_GET_FIRMWARE;
+
+NFCReader::NFCReader(IInterfaceAdapter *adapter) : _adapter(adapter){}
+
+int NFCReader::receive_raw(uint8_t *buf) {
+  
+  // Delegate receiving to implemented adapter class
+  return _adapter->receive(_last_command, buf);
 }
 
 void NFCReader::write_raw(nfc_command_t command, uint8_t *buf, int len) {
+
+  // Save this command so we can reference when we receive the response
   _last_command = command;
+
+  // Send the command to the sm130 using the delegated adaptor class
   _adapter->send(command, buf, len);
 }
 
 void NFCReader::reset() {
+  // Write the reset command
   write_raw(NFC_RESET, 0, 0);
+
+  // Wait a bit for safety
+  delay(STANDARD_DELAY);
 }
 
-void NFCReader::get_firmware_version(uint8_t *buf) {
-  //read_raw
+int NFCReader::get_firmware_version(uint8_t *buf) {
+
+  // Write the command to get firmware
   write_raw(NFC_GET_FIRMWARE, 0, 0);
 
-  delay(10);
+  // Delay for processing safety
+  delay(STANDARD_DELAY);
 
-  return receive_raw(buf):
+  // Get the response
+  return receive_raw(buf);
 }
 
-void NFCReader::select() {
-  //read_tag
+status_code_t NFCReader::select(Tag *tag) {
+
+  // Write the command to select current tag in field
   write_raw(NFC_SELECT, 0, 0);
+
+  // Delay for processing safety
+  delay(STANDARD_DELAY);
+
+
+  // Get the response
+  return receive_tag(tag);
+
 }
 
-void NFCReader::seek() {
-  //read_tag
+status_code_t NFCReader::seek(Tag *tag) {
+
+  // Write the command to select next tag in field
   write_raw(NFC_SEEK, 0, 0);
-}
 
-void NFCReader::authenticate(int block_num, key_type_t type, uint8_t *key) {
-  //read_status
-  uint8_t buf[8];
-  
-  buf[0] = (uint8_t)block_num;
-  buf[1] = (uint8_t)type;
-  if(type == KEY_TYPE_A || type == KEY_TYPE_B) {
-    memcpy(buf + 2, key, 6);
-  } else {
-    memset(buf + 2, 0, 6);
-  }
-  write_raw(NFC_AUTHENTICATE, buf, 8);
-}
+  // Delay for processing safety
+  delay(STANDARD_DELAY);
 
-void NFCReader::read_block(int block_num) {
-  uint8_t buf[1];
-  buf[0] = (uint8_t)block_num;
-  write_raw(NFC_READ_BLOCK, buf, 1);
-}
-
-void NFCReader::halt() {
-  write_raw(NFC_HALT, 0, 0);
-}
-
-int NFCReader::receive_raw(uint8_t *buf) {
-  return _adapter->receive(_last_command, buf);
-}
-
-status_code_t NFCReader::receive_status() {
-  uint8_t status;
-  int len = receive_raw(&status);
-  if(len <= 0) {
-    return STATUS_INVALID_RESPONSE;
-  } else {
-    return (status_code_t)status;
-  }
+  // Get the response
+  return receive_tag(tag);
 }
 
 status_code_t NFCReader::receive_tag(Tag *tag) {
+
+  // Create a buffer for the response
   uint8_t buf[8];
+
+  // Grab the response from the adapter
   int len = receive_raw(buf);
+
+  // If we got a response with a negative length
+  // then there was an error
   if(len < 0) {
     return STATUS_INVALID_RESPONSE;
-  } else if(len == 1) {
+  } 
+  // If the length is one
+  // Something weird happened
+  else if(len == 1) {
     return (status_code_t)buf[0];
-  } else {
+  } 
+
+  // Else, parse the tag info 
+  else {
+    // Tag type is the first byte
     tag->type = (tag_type_t)buf[0];
+
+    // The size is the rest of the packet
     tag->serial_size = len - 1;
+
+    // Copy the UUID into the buffer
     memcpy(tag->serial, buf + 1, tag->serial_size);
+
+    // Return success
     return STATUS_SUCCESS;
-  }
-}
-
-status_code_t NFCReader::receive_block(Block *block) {
-  uint8_t buf[17];
-  int len = receive_raw(buf);
-  if(len == 1) {
-    return (status_code_t)buf[0];
-  } else if(len == 17) {
-    // TODO: Finish
-  } else {
-    return STATUS_INVALID_RESPONSE;
-  }
-}#include "sm130.h"
-
-NFCReader::NFCReader(IInterfaceAdapter *adapter) : _adapter(adapter) {
-  _last_command = NFC_GET_FIRMWARE;
-}
-
-void NFCReader::write_raw(nfc_command_t command, uint8_t *buf, int len) {
-  _last_command = command;
-  _adapter->send(command, buf, len);
-}
-
-void NFCReader::reset() {
-  write_raw(NFC_RESET, 0, 0);
-}
-
-void NFCReader::get_firmware_version(uint8_t *buf) {
-  //read_raw
-  write_raw(NFC_GET_FIRMWARE, 0, 0);
-
-  delay(10);
-
-  return receive_raw(buf):
-}
-
-void NFCReader::select() {
-  //read_tag
-  write_raw(NFC_SELECT, 0, 0);
-}
-
-void NFCReader::seek() {
-  //read_tag
-  write_raw(NFC_SEEK, 0, 0);
-}
-
-void NFCReader::authenticate(int block_num, key_type_t type, uint8_t *key) {
-  //read_status
-  uint8_t buf[8];
-  
-  buf[0] = (uint8_t)block_num;
-  buf[1] = (uint8_t)type;
-  if(type == KEY_TYPE_A || type == KEY_TYPE_B) {
-    memcpy(buf + 2, key, 6);
-  } else {
-    memset(buf + 2, 0, 6);
-  }
-  write_raw(NFC_AUTHENTICATE, buf, 8);
-}
-
-void NFCReader::read_block(int block_num) {
-  uint8_t buf[1];
-  buf[0] = (uint8_t)block_num;
-  write_raw(NFC_READ_BLOCK, buf, 1);
-}
-
-void NFCReader::halt() {
-  write_raw(NFC_HALT, 0, 0);
-}
-
-int NFCReader::receive_raw(uint8_t *buf) {
-  return _adapter->receive(_last_command, buf);
-}
-
-status_code_t NFCReader::receive_status() {
-  uint8_t status;
-  int len = receive_raw(&status);
-  if(len <= 0) {
-    return STATUS_INVALID_RESPONSE;
-  } else {
-    return (status_code_t)status;
-  }
-}
-
-status_code_t NFCReader::receive_tag(Tag *tag) {
-  uint8_t buf[8];
-  int len = receive_raw(buf);
-  if(len < 0) {
-    return STATUS_INVALID_RESPONSE;
-  } else if(len == 1) {
-    return (status_code_t)buf[0];
-  } else {
-    tag->type = (tag_type_t)buf[0];
-    tag->serial_size = len - 1;
-    memcpy(tag->serial, buf + 1, tag->serial_size);
-    return STATUS_SUCCESS;
-  }
-}
-
-status_code_t NFCReader::receive_block(Block *block) {
-  uint8_t buf[17];
-  int len = receive_raw(buf);
-  if(len == 1) {
-    return (status_code_t)buf[0];
-  } else if(len == 17) {
-    // TODO: Finish
-  } else {
-    return STATUS_INVALID_RESPONSE;
   }
 }
