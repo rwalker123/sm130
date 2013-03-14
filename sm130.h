@@ -77,6 +77,7 @@ public:
   // Wait until a tag enters the field and grab the details
   uint8_t readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length);
 
+  // Print a value in hex with the '0x' appended at the front
   void PrintHex(const byte * data, const uint32_t numBytes);
 };
 
