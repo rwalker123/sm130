@@ -226,6 +226,10 @@ uint8_t NFCReader::receive_tag(uint8_t *uid, uint8_t *length) {
   // Grab the response from the adapter
   uint8_t len = receive(sm130_packetbuffer);
 
+  // There seems to be a bug where only several tags will
+  // be sent back unless we reset everytime. 
+  reset();  
+
   // If we got a response with a negative length
   // then there was an error
   if(len <= 0) {

@@ -59,9 +59,9 @@ void loop() {
   if (success &&  (millis() - lastReadTime > (TIME_DELAY * 1000))) {
     Serial.println("Got a tag!");
     // Print out the length
-    Serial.print("Length: ");
+    Serial.print("UID Length: ");
     Serial.print(uidLength, HEX);
-    Serial.print(", ID: ");
+    Serial.print(", UID Value: ");
     
     // Print the ID in hex format
     rfid.PrintHex(uid, uidLength);
