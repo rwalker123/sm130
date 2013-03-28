@@ -1,7 +1,7 @@
 #include "sm130.h"
 
-#define sm130_PACKBUFFSIZE 36
-uint32_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
+#define sm130_PACKBUFFSIZE 8
+uint8_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
 
 
 /**************************************************************************/
@@ -78,7 +78,7 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
     @param  data  Buffer to store response from server into
 */
 /**************************************************************************/
-uint8_t NFCReader::receive(uint32_t *data) {
+uint8_t NFCReader::receive(uint8_t *data) {
 
   // Initialize the checksum
   uint8_t checksum = 0;

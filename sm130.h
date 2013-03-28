@@ -55,7 +55,7 @@ private:
   SoftwareSerial _nfc;
   nfc_command_t _last_command;
   void send(nfc_command_t command, uint8_t *data, int len);
-  uint8_t receive(uint32_t *data);
+  uint8_t receive(uint8_t *data);
   uint8_t receive_tag(uint8_t *uid, uint8_t *length);
 public:
 
