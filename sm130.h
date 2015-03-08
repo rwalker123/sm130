@@ -7,9 +7,21 @@
   #include "WProgram.h"
   #endif
 #include <inttypes.h>
-#include <SoftwareSerial.h>
 
 #define STANDARD_DELAY 100
+
+// Format of send message:
+// Header   Reserved    Length   Command    Data       CSUM
+// 1 byte    1 byte     1 byte   1 byte     N bytes    1 byte
+//
+// Format of receive message:
+// Header   Reserved    Length   Command    Response   CSUM
+// 1 byte    1 byte     1 byte   1 byte     N bytes    1 byte
+//
+// CSUM: This is the checksum byte. This byte is used on the host as well as the module to
+//       check the validity of the packet and to trap any data corruption. This is calculated by
+//       adding all the bytes in the packet except the Header byte 
+
 
 enum nfc_command_t {
   NFC_NONE = 0,
@@ -34,10 +46,6 @@ enum nfc_command_t {
   NFC_SLEEP = 0x96,
 };
 
-enum target_t {
-  PN532_MIFARE_ISO14443A = 0x01,
-};
-
 enum status_code_t {
   STATUS_SUCCESS = 0x00,
   STATUS_INVALID_RESPONSE = 0x01,
@@ -52,18 +60,19 @@ enum status_code_t {
 
 class NFCReader {
 private:
-  SoftwareSerial _nfc;
+  Stream* _nfc;
   nfc_command_t _last_command;
   void send(nfc_command_t command, uint8_t *data, int len);
-  uint8_t receive(uint8_t *data);
+  uint8_t receive(uint8_t *data, int dataLen);
   uint8_t receive_tag(uint8_t *uid, uint8_t *length);
+  
 public:
 
   // Create a new NFC Reader
-  NFCReader(int inpin, int outpin);
+  NFCReader();
 
   // Begin communicating over UART (must be called);
-  void begin();
+  void setSerial(Stream &serial);
 
   // Check if the adapter is available for commands
   uint8_t available();
@@ -74,8 +83,9 @@ public:
   // Get the version of the firmware (generally a good test to see if UART is working)
   uint32_t getFirmwareVersion();
 
-  // Wait until a tag enters the field and grab the details
-  uint8_t readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length);
+  // Read a tag, first method waits for tag, second does not.
+  uint8_t waitForTagID(uint8_t *uid, uint8_t *length);
+  uint8_t readTagID(uint8_t *uid, uint8_t *length);
 
   // Print a value in hex with the '0x' appended at the front
   void PrintHex(const byte * data, const uint32_t numBytes);

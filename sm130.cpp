@@ -1,6 +1,6 @@
 #include "sm130.h"
 
-#define sm130_PACKBUFFSIZE 8
+#define sm130_PACKBUFFSIZE 9
 uint8_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
 
 
@@ -8,11 +8,15 @@ uint8_t sm130_packetbuffer[sm130_PACKBUFFSIZE];
 /*! 
     @brief  Created an NFCReader object
 
-    @param  inpin   Pin for receiving data from sm130
-    @param  outpin  Pin for sending data to sm130
 */
 /**************************************************************************/
-NFCReader::NFCReader(int inpin, int outpin): _nfc(inpin, outpin) {}
+NFCReader::NFCReader() {
+#if defined(__AVR_ATmega32U4__) || defined(__MK20DX128__)
+	_nfc = &Serial1;
+#else
+    _nfc = &Serial;
+#endif
+}
 
 /* Packet Configuration 
 
@@ -48,27 +52,27 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
   uint8_t checksum = len + 1 + command;
 
   // Write header
-  _nfc.write(0xFF);
+  _nfc->write(0xFF);
 
   // Write reserved
-  _nfc.write((byte)0x00);
+  _nfc->write((byte)0x00);
 
   // Write length
-  _nfc.write(len + 1);
+  _nfc->write(len + 1);
 
   // Write command
-  _nfc.write(command);
+  _nfc->write(command);
 
   // Write each data bit
   for(int i = 0; i < len; i++) {
     checksum += data[i];
-    _nfc.write(data[i]);
+    _nfc->write(data[i]);
   }
 
   // Send up checksum
-  _nfc.write(checksum);
+  _nfc->write(checksum);
 
-  delay(100);
+  delay(STANDARD_DELAY);
 }
 
 /**************************************************************************/
@@ -78,27 +82,36 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
     @param  data  Buffer to store response from server into
 */
 /**************************************************************************/
-uint8_t NFCReader::receive(uint8_t *data) {
+uint8_t NFCReader::receive(uint8_t *data, int dataLen) {
 
   // Initialize the checksum
   uint8_t checksum = 0;
 
+  // wait for data.
+  while (!_nfc->available()) ;
+  
   // Wait until we get the header byte
-  while(_nfc.read() != 0xFF);
+  while(_nfc->available())
+	if(_nfc->read() == 0xFF)
+		break;
 
   // If the next byte isn't reserved, something is wrong
-  if(_nfc.read() != 0x00) {
+  if(_nfc->read() != 0x00) {
     return -1;
   }
 
   // Read the length byte
-  int len = _nfc.read();
-
+  int len = _nfc->read();
+  
+  // input buffer not large enough.
+  if (dataLen < len) 
+	  return -1;
+  
   // Add that to the checksum
   checksum += len;
 
   // Read the command we're responding to
-  int command_in = _nfc.read();
+  int command_in = _nfc->read();
 
   // Add that to the checksum
   checksum += command_in;
@@ -109,16 +122,16 @@ uint8_t NFCReader::receive(uint8_t *data) {
 
   // Grab all the data bytes
   for(int i = 0; i < len - 1; i++) {
-    data[i] = _nfc.read();
+    data[i] = _nfc->read();
     checksum += data[i];
   }
 
   // Confirm the checksum
-  int checksum_in = _nfc.read();
+  int checksum_in = _nfc->read();
   if(checksum_in != checksum)
     return -1;
-
-  return len - 1;
+  
+  return len;
 }
 
 /**************************************************************************/
@@ -126,11 +139,9 @@ uint8_t NFCReader::receive(uint8_t *data) {
     @brief  Begins communicating on a UART channel
 */
 /**************************************************************************/
-void NFCReader::begin() {
+void NFCReader::setSerial(Stream &serial) {
 
-  // Using a constant rate to match the API
-  // of Lady Adafruit's library which uses I2C
-   _nfc.begin(19200);
+  _nfc = &serial;
 }
 
 /**************************************************************************/
@@ -139,7 +150,7 @@ void NFCReader::begin() {
 */
 /**************************************************************************/
 uint8_t NFCReader::available() {
-  return _nfc.available();
+  return _nfc->available();
 }
 
 /**************************************************************************/
@@ -172,7 +183,7 @@ uint32_t NFCReader::getFirmwareVersion() {
 
   memset(sm130_packetbuffer, '\0',sm130_PACKBUFFSIZE);
 
-  if (!receive(sm130_packetbuffer)) {
+  if (!receive(sm130_packetbuffer, sm130_PACKBUFFSIZE)) {
     return 0;
   }
 
@@ -188,19 +199,57 @@ uint32_t NFCReader::getFirmwareVersion() {
   
 }
 
+/*
+void halt()
+{
+ //Halt tag
+  rfid.write((uint8_t)255);
+  rfid.write((uint8_t)0);
+  rfid.write((uint8_t)1);
+  rfid.write((uint8_t)147);
+  rfid.write((uint8_t)148);
+}
+*/
+
 /**************************************************************************/
 /*! 
     @brief  Waits until we have a tag to report then returns the uuid
 
-    @param  target   The baud rate of the target. Not currently used
     @param  uid      Pointer a buffer that will have the uuid stored into it
     @param  length   Length in bytes
 */
 /**************************************************************************/
-uint8_t NFCReader::readPassiveTargetID(target_t target, uint8_t *uid, uint8_t *length) {
+uint8_t NFCReader::waitForTagID(uint8_t *uid, uint8_t *length) {
 
   // Write the command to select next tag in field
   send(NFC_SEEK, 0, 0);
+
+  // Delay for processing safety
+  delay(STANDARD_DELAY);
+
+  // Get the response
+  uint8_t retVal = receive_tag(uid, length);
+  if (retVal == 0x4C) { // STATUS_NO_TAG
+	delay(STANDARD_DELAY);
+	// wait for the tag present.
+	retVal = receive_tag(uid, length);
+  }
+  
+  return retVal;
+}
+
+/**************************************************************************/
+/*! 
+    @brief  Reads tag, if not present returns error code
+
+    @param  uid      Pointer a buffer that will have the uuid stored into it
+    @param  length   Length in bytes
+*/
+/**************************************************************************/
+uint8_t NFCReader::readTagID(uint8_t *uid, uint8_t *length) {
+
+  // Write the command to select next tag in field
+  send(NFC_SELECT, 0, 0);
 
   // Delay for processing safety
   delay(STANDARD_DELAY);
@@ -224,21 +273,25 @@ uint8_t NFCReader::receive_tag(uint8_t *uid, uint8_t *length) {
   memset(sm130_packetbuffer, '\0', sm130_PACKBUFFSIZE);
 
   // Grab the response from the adapter
-  uint8_t len = receive(sm130_packetbuffer);
+  uint8_t len = receive(sm130_packetbuffer, sm130_PACKBUFFSIZE);
 
+  //Serial.print("Length is: ");
+  //Serial.println(len);
+  //PrintHex(sm130_packetbuffer, sm130_PACKBUFFSIZE);
+  
   // There seems to be a bug where only several tags will
   // be sent back unless we reset everytime. 
-  reset();  
+  //reset();  
 
   // If we got a response with a negative length
   // then there was an error
   if(len <= 0) {
-    return 0;
+    return 2;
   } 
   // If the length is one
   // Something weird happened
   else if(len == 1 || len == 0xFF) {
-    return 0;
+    return 3;
   } 
 
   // Else, parse the tag info 
@@ -246,6 +299,11 @@ uint8_t NFCReader::receive_tag(uint8_t *uid, uint8_t *length) {
 
     // // The size is the rest of the packet
     *length = len - 1;
+
+	// error code
+	if (*length == 1) {
+		return sm130_packetbuffer[0];
+	}
 
     // Copy the UUID into the buffer
     for (int i = 0; i < *length; i++) {
