@@ -104,7 +104,7 @@ uint8_t NFCReader::receive(uint8_t *data, int dataLen) {
   int len = _nfc->read();
   
   // input buffer not large enough.
-  if (dataLen < len) 
+  if (dataLen < (len-1)) 
 	  return -1;
   
   // Add that to the checksum
@@ -171,7 +171,7 @@ void NFCReader::reset() {
     @brief  Returns the components of the firmware in an int32_t
 */
 /**************************************************************************/
-uint32_t NFCReader::getFirmwareVersion() {
+  uint8_t NFCReader::getFirmwareVersion(uint8_t *versionString, int dataLen) {
 
   uint32_t response;
 
@@ -181,22 +181,100 @@ uint32_t NFCReader::getFirmwareVersion() {
   // Delay for processing safety
   delay(STANDARD_DELAY);
 
-  memset(sm130_packetbuffer, '\0',sm130_PACKBUFFSIZE);
+  memset(versionString, '\0', dataLen);
+  return receive(versionString, dataLen);
+}
 
-  if (!receive(sm130_packetbuffer, sm130_PACKBUFFSIZE)) {
-    return 0;
+/**************************************************************************/
+/*! 
+    @brief   Authenticates the specified block with the specified Key type and Key
+			 sequence. If Authentication fails then the Select Tag operation should be repeated to
+			 authenticate again. 
+*/
+/**************************************************************************/
+uint8_t NFCReader::authenticate(uint8_t blockNumber, uint8_t keyType, uint8_t* key) {
+  uint8_t authData[8];
+  authData[0] = blockNumber;
+  authData[1] = keyType;
+  // keys are 6 bytes
+  for(int i = 0; i < 6; i++) {
+	  authData[i + 2] = key[i];
   }
-
-  response = sm130_packetbuffer[3];
-  response <<= 8;
-  response |= sm130_packetbuffer[4];
-  response <<= 8;
-  response |= sm130_packetbuffer[5];
-  response <<= 8;
-  response |= sm130_packetbuffer[6];
-
-  return response;
+	  
+  send(NFC_AUTHENTICATE, authData, sizeof(authData));
   
+  delay(STANDARD_DELAY);
+  
+  int responseLen = 1;
+  uint8_t response[responseLen];
+  memset(response, '\0', responseLen);
+  int len = receive(response, responseLen);
+  // length includes command byte.
+  if (len == 2) {
+	  return response[0];
+  }
+  
+  return 0xFF;
+}
+  
+/**************************************************************************/
+/*! 
+    @brief  reads 16 bytes from the specified block. Before executing this command,
+			the particular block should be authenticated. If not authenticated, this command will
+			fail. 
+*/
+/**************************************************************************/  
+uint8_t NFCReader::readBlock(uint8_t blockNumber, uint8_t *blockData) {
+
+  int responseLen = 17; // max of 17 bytes, if error will response will be 1 byte.
+  memset(blockData, '\0', responseLen);
+  
+  send(NFC_READ_BLOCK, &blockNumber, 1);
+  delay(STANDARD_DELAY);
+  
+  // response is blockNumber (1 byte) + blockData (16 bytes)
+  int len = receive(blockData, responseLen);
+  // length includes command byte.
+  if (len == 2) { // 2 bytes is an error (command byte + error code)
+	  return blockData[0]; 
+  }
+  
+  return 0x01;
+}
+
+/**************************************************************************/
+/*! 
+    @brief  reads a value block. Value is a 4byte signed integer. Before executing this
+			command, the block should be authenticated. If the block is not authenticated, this
+			command will fail. Also, this command will fail if the block is not in valid Value format.  
+*/
+/**************************************************************************/  
+uint8_t NFCReader::readValueBlock(uint8_t blockNumber, int32_t *valueData) {
+  
+  send(NFC_READ_VALUE, &blockNumber, 1);
+  delay(STANDARD_DELAY);
+
+  int responseLen = 5; // max of 5 bytes (blockNumber + 4 byte value), if error will response will be 1 byte.  
+  uint8_t response[responseLen];
+  memset(response, '\0', responseLen);
+  
+  // response is blockNumber (1 byte) + blockData (16 bytes)
+  int len = receive(response, responseLen);
+  // length includes command byte.
+  if (len == 2) { // 2 bytes is an error (command byte + error code)
+	  return response[0]; 
+  }
+  else {
+	// return bytes are LSB -> MSB. Index 0, is LSB. Loop will add MSB, shift right, etc.
+    *valueData = 0;
+  
+	for(int i = 3; i >= 0; --i) {
+	  *valueData <<= 8;
+	  *valueData |= (response[i] & 0xFF);
+	}
+  }
+  
+  return 0x01;	
 }
 
 /*

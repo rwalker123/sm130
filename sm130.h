@@ -81,12 +81,53 @@ public:
   void reset();
 
   // Get the version of the firmware (generally a good test to see if UART is working)
-  uint32_t getFirmwareVersion();
+  // firmware version is returned in versionString, length is the size of versionString
+  uint8_t getFirmwareVersion(uint8_t *versionString, int dataLen);
 
   // Read a tag, first method waits for tag, second does not.
   uint8_t waitForTagID(uint8_t *uid, uint8_t *length);
   uint8_t readTagID(uint8_t *uid, uint8_t *length);
 
+  // 
+  //Key Type
+  // 1 Byte – Option byte that instructs the module which type of key to be
+  //          used for authentication
+  //          0xAA: Authenticate with Key type A
+  //          0xBB: Authenticate with Key type B
+  //          0xFF: Authenticate with Key type A and transport key FF FF FF FF FF FF
+  //          0x10 to 0x1F: Authenticate with Key type A using the key stored in the
+  //          SM13X module’s E2PROM (0 to 15)
+  //          0x20 to 0x2F: Authenticate with Key type B using the key stored in the
+  //          SM13X module’s E2PROM (0 to 15)
+  //          Key 6 Bytes – Key to be used for authentication. 
+  // Returns:
+  // 0x4C ‘L’ – Login Successful
+  // 0x4E ‘N’ – No Tag present or Login Failed
+  // 0x55 ‘U’ – Login Failed
+  // 0x45 ‘E’ – Invalid key format in E2PROM 
+  uint8_t authenticate(uint8_t blockNumber, uint8_t keyType, uint8_t* key);
+  
+  // reads 16 bytes from the specified block. Before executing this command,
+  // the particular block should be authenticated. If not authenticated, this command will
+  // fail. 
+  // Note: When reading a Mifare UL tag, the first 4 bytes are from the block number specified.
+  //       The next 12 bytes are from the consecutive blocks.
+  // Returns:
+  //  returns 0x01 on success.
+  //  0x4E ‘N’ – No Tag present
+  //  0x46 ‘F’ – Read Failed 
+  uint8_t readBlock(uint8_t blockNumber, uint8_t *blockData);
+  
+  //  reads a value block. Value is a 4byte signed integer. Before executing this
+  //  command, the block should be authenticated. If the block is not authenticated, this
+  //  command will fail. Also, this command will fail if the block is not in valid Value format.
+  // Returns:
+  //  returns 0x01 on success.
+  //  0x4E ‘N’ – No Tag present
+  //  0x49 ‘I’ – Invalid Value Block 
+  //  0x46 ‘F’ – Read Failed 
+  uint8_t readValueBlock(uint8_t blockNumber, int32_t *valueData);
+  
   // Print a value in hex with the '0x' appended at the front
   void PrintHex(const byte * data, const uint32_t numBytes);
 };
