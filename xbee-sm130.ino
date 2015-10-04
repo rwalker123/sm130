@@ -34,6 +34,8 @@ NFCReader nfc = NFCReader();
 int statusLed = 5;
 int errorLed = 4;
 
+//#define ENABLE_RFID
+
 void setup() {
   pinMode(statusLed, OUTPUT);
   pinMode(errorLed, OUTPUT);
@@ -42,18 +44,32 @@ void setup() {
   xbee.setSerial(xbeeSerial);
   delay(1000);
 
+#ifdef ENABLE_RFID
   rfid.begin(19200);
   nfc.setSerial(rfid);    
   delay(1000);
+#endif
 
   Serial.begin(19200);
   delay(1000);
 
+#ifdef ENABLE_RFID
   get_rfid_version();
+#endif
 }
 
 void loop() {
+#ifndef ENABLE_RFID
+    uint8_t payload[] = { 'a', 'b', 'c', 'd' };
+    Tx16Request tx = Tx16Request(0x0002, payload, sizeof(payload));
+    send_to_xbee(&tx);
 
+    uint8_t payload2[] = { 'e', 'f', 'g', 'h' };
+    Tx16Request tx2 = Tx16Request(0x0001, payload2, sizeof(payload));
+    send_to_xbee(&tx2);
+
+    delay(1000);
+#else
 	uint8_t uid[9];
 	uint8_t tagResult = get_rfid_tag(uid);
 	if (tagResult == 1) {
@@ -77,16 +93,17 @@ void loop() {
 	}
 
 	delay(100);
+#endif
 }
 
 void get_rfid_version()
 {
-	rfid.listen();
 	Serial.print("Firmware version: ");
+  rfid.listen();
 	int len = 10;
 	uint8_t firmwareVersion[len];
 	nfc.getFirmwareVersion(firmwareVersion, len);
-	Serial.println((const char *)firmwareVersion);
+  Serial.println((const char *)firmwareVersion);
 }
 
 uint8_t get_rfid_tag(uint8_t *uid)

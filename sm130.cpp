@@ -89,11 +89,12 @@ uint8_t NFCReader::receive(uint8_t *data, int dataLen) {
 
   // wait for data.
   while (!_nfc->available()) ;
-  
+
   // Wait until we get the header byte
-  while(_nfc->available())
-	if(_nfc->read() == 0xFF)
-		break;
+  while (_nfc->available()) {
+	  if (_nfc->read() == 0xFF)
+		  break;
+  }
 
   // If the next byte isn't reserved, something is wrong
   if(_nfc->read() != 0x00) {
