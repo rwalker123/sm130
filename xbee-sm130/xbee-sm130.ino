@@ -19,47 +19,67 @@
 #include <sm130.h>
 #include <SoftwareSerial.h>
 
+// 1 - NORMAL Mode
+#define RFID_TEST_MODE 2
+#define XBEE_TEST_MODE 3
+
+#define RUN_MODE 1
+
 //Prototypes
 void send_to_xbee(Tx16Request*);
 void get_rfid_version();
 uint8_t get_rfid_tag(uint8_t *uid);
 void flashLed(int pin, int times, int wait);
 
+#if RUN_MODE != RFID_TEST_MODE
 SoftwareSerial xbeeSerial(10, 9);
-SoftwareSerial rfid(7, 8);
-
 XBee xbee = XBee();
+#endif
+
+#if RUN_MODE != XBEE_TEST_MODE
+SoftwareSerial rfid(7, 8);
 NFCReader nfc = NFCReader();
+#endif
+
 
 int statusLed = 5;
 int errorLed = 4;
 
-//#define ENABLE_RFID
-
 void setup() {
+  Serial.begin(19200);
+  delay(100);
+
+#if RUN_MODE == RFID_TEST_MODE
+  Serial.print("RFID TEST Mode");
+#elif RUN_MODE == XBEE_TEST_MODE
+  Serial.print("XBEE TEST Mode");
+#else
+  Serial.print("Normal Mode");
+#endif
+
+  Serial.println();
+  
   pinMode(statusLed, OUTPUT);
   pinMode(errorLed, OUTPUT);
 
+#if RUN_MODE != RFID_TEST_MODE
   xbeeSerial.begin(19200);
   xbee.setSerial(xbeeSerial);
-  delay(1000);
+  delay(100);
+#endif
 
-#ifdef ENABLE_RFID
+#if RUN_MODE != XBEE_TEST_MODE
   rfid.begin(19200);
   nfc.setSerial(rfid);    
-  delay(1000);
-#endif
+  delay(100);
 
-  Serial.begin(19200);
-  delay(1000);
-
-#ifdef ENABLE_RFID
   get_rfid_version();
 #endif
+
 }
 
 void loop() {
-#ifndef ENABLE_RFID
+#if RUN_MODE == XBEE_TEST_MODE
     uint8_t payload[] = { 'a', 'b', 'c', 'd' };
     Tx16Request tx = Tx16Request(0x0002, payload, sizeof(payload));
     send_to_xbee(&tx);
@@ -79,10 +99,12 @@ void loop() {
 		Serial.print(uid[3], HEX);
 		Serial.println();
 
+#if RUN_MODE != RFID_TEST_MODE
 		uint8_t payload[] = { uid[0], uid[1], uid[2], uid[3] };
 		Tx16Request tx = Tx16Request(0x0001, payload, sizeof(payload));
 
 		send_to_xbee(&tx);
+#endif
 	}
 	else if (tagResult == 0x4E) {
 		//Serial.println("No Tag Present");
@@ -114,6 +136,7 @@ uint8_t get_rfid_tag(uint8_t *uid)
 	return nfc.readTagID(uid, &length);
 }
 
+#if RUN_MODE != RFID_TEST_MODE
 void send_to_xbee(Tx16Request* tx)
 {
 	xbeeSerial.listen(); // uno cannot listen to 2 ports at same time.
@@ -158,6 +181,7 @@ void send_to_xbee(Tx16Request* tx)
 		flashLed(errorLed, 2, 50);
 	}
 }
+#endif
 
 uint8_t hi_word(uint16_t t)
 {
