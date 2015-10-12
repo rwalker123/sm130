@@ -15,15 +15,20 @@
  *
  */
  
-#include <XBee.h>
-#include <sm130.h>
-#include <SoftwareSerial.h>
-
 // 1 - NORMAL Mode
 #define RFID_TEST_MODE 2
 #define XBEE_TEST_MODE 3
 
 #define RUN_MODE 1
+
+//#define RFID_USE_I2C
+
+#include <XBee.h>
+#include <sm130.h>
+#include <SoftwareSerial.h>
+#ifdef RFID_USE_I2C
+#include <Wire.h>
+#endif
 
 //Prototypes
 void send_to_xbee(Tx16Request*);
@@ -37,8 +42,12 @@ XBee xbee = XBee();
 #endif
 
 #if RUN_MODE != XBEE_TEST_MODE
+#ifdef RFID_USE_I2C
+NFCReader nfc = NFCReader(NFC_I2C);
+#else
 SoftwareSerial rfid(7, 8);
-NFCReader nfc = NFCReader();
+NFCReader nfc = NFCReader(NFC_UART);
+#endif
 #endif
 
 
@@ -69,8 +78,13 @@ void setup() {
 #endif
 
 #if RUN_MODE != XBEE_TEST_MODE
+#ifdef RFID_USE_I2C
+  Wire.begin();
+  nfc.setSerial(Wire);
+#else
   rfid.begin(19200);
   nfc.setSerial(rfid);    
+#endif
   delay(100);
 
   get_rfid_version();
@@ -121,17 +135,20 @@ void loop() {
 void get_rfid_version()
 {
 	Serial.print("Firmware version: ");
-  rfid.listen();
+#ifndef RFID_USE_I2C
+  	rfid.listen();
+#endif
 	int len = 10;
 	uint8_t firmwareVersion[len];
 	nfc.getFirmwareVersion(firmwareVersion, len);
-  Serial.println((const char *)firmwareVersion);
+	Serial.println((const char *)firmwareVersion);
 }
 
 uint8_t get_rfid_tag(uint8_t *uid)
 {
+#ifndef RFID_USE_I2C
 	rfid.listen(); // uno cannot listen to 2 ports at same time.
-
+#endif
 	uint8_t length;
 	return nfc.readTagID(uid, &length);
 }

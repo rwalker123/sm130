@@ -22,6 +22,10 @@
 //       check the validity of the packet and to trap any data corruption. This is calculated by
 //       adding all the bytes in the packet except the Header byte 
 
+enum nfc_protocol_t {
+  NFC_UART,
+  NFC_I2C
+};
 
 enum nfc_command_t {
   NFC_NONE = 0,
@@ -62,6 +66,8 @@ class NFCReader {
 private:
   Stream* _nfc;
   nfc_command_t _last_command;
+  const nfc_protocol_t _protocol;
+  
   void send(nfc_command_t command, uint8_t *data, int len);
   uint8_t receive(uint8_t *data, int dataLen);
   uint8_t receive_tag(uint8_t *uid, uint8_t *length);
@@ -69,7 +75,7 @@ private:
 public:
 
   // Create a new NFC Reader
-  NFCReader();
+  NFCReader(protocol_t protocol);
 
   // Begin communicating over UART (must be called);
   void setSerial(Stream &serial);

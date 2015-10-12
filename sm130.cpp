@@ -51,12 +51,17 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
   // Init checksum (length + command )
   uint8_t checksum = len + 1 + command;
 
-  // Write header
-  _nfc->write(0xFF);
-
-  // Write reserved
-  _nfc->write((byte)0x00);
-
+  if (_protocol == NFC_UART) {    
+    // Write header
+    _nfc->write(0xFF);
+  
+    // Write reserved
+    _nfc->write((byte)0x00);
+  }
+  else {
+    Wire.beginTransmission(0x42); // SM130 module slave address 
+  }
+  
   // Write length
   _nfc->write(len + 1);
 
@@ -72,6 +77,10 @@ void NFCReader::send(nfc_command_t command, uint8_t *data, int len) {
   // Send up checksum
   _nfc->write(checksum);
 
+  if (_protocol == NFC_I2C) {
+    Wire.endTransmission();     
+  }
+  
   delay(STANDARD_DELAY);
 }
 
@@ -90,17 +99,19 @@ uint8_t NFCReader::receive(uint8_t *data, int dataLen) {
   // wait for data.
   while (!_nfc->available()) ;
 
-  // Wait until we get the header byte
-  while (_nfc->available()) {
-	  if (_nfc->read() == 0xFF)
-		  break;
+  if (_protocol == NFC_UART) {
+    // Wait until we get the header byte
+    while (_nfc->available()) {
+      if (_nfc->read() == 0xFF)
+        break;
+    }
+  
+    // If the next byte isn't reserved, something is wrong
+    if(_nfc->read() != 0x00) {
+      return -1;
+    }
   }
-
-  // If the next byte isn't reserved, something is wrong
-  if(_nfc->read() != 0x00) {
-    return -1;
-  }
-
+  
   // Read the length byte
   int len = _nfc->read();
   
