@@ -134,6 +134,7 @@ void loop() {
 
 void get_rfid_version()
 {
+<<<<<<< 4d3985eeb196c946b05e4e8373990deca64c178c
 	Serial.print("Firmware version: ");
 #ifndef RFID_USE_I2C
   	rfid.listen();
@@ -142,6 +143,16 @@ void get_rfid_version()
 	uint8_t firmwareVersion[len];
 	nfc.getFirmwareVersion(firmwareVersion, len);
 	Serial.println((const char *)firmwareVersion);
+=======
+	//Serial.print("Firmware version: ");
+  rfid.listen();
+	int len = 10;
+	uint8_t firmwareVersion[len];
+	nfc.getFirmwareVersion(firmwareVersion, len);
+  //Serial.println((const char *)firmwareVersion);
+  Tx16Request tx = Tx16Request(0x0001, firmwareVersion, sizeof(firmwareVersion));
+  send_to_xbee(&tx);
+>>>>>>> updates
 }
 
 uint8_t get_rfid_tag(uint8_t *uid)
