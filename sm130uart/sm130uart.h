@@ -1,5 +1,5 @@
-#ifndef sm130_h
-#define sm130_h
+#ifndef sm130uart_h
+#define sm130uart_h
 
 #if defined(ARDUINO) && ARDUINO >= 100
   #include "Arduino.h"
@@ -21,11 +21,6 @@
 // CSUM: This is the checksum byte. This byte is used on the host as well as the module to
 //       check the validity of the packet and to trap any data corruption. This is calculated by
 //       adding all the bytes in the packet except the Header byte 
-
-enum nfc_protocol_t {
-  NFC_UART,
-  NFC_I2C
-};
 
 enum nfc_command_t {
   NFC_NONE = 0,
@@ -66,7 +61,6 @@ class NFCReader {
 private:
   Stream* _nfc;
   nfc_command_t _last_command;
-  const nfc_protocol_t _protocol;
   
   void send(nfc_command_t command, uint8_t *data, int len);
   uint8_t receive(uint8_t *data, int dataLen);
@@ -75,7 +69,7 @@ private:
 public:
 
   // Create a new NFC Reader
-  NFCReader(protocol_t protocol);
+  NFCReader();
 
   // Begin communicating over UART (must be called);
   void setSerial(Stream &serial);

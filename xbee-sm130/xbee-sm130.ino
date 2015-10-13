@@ -21,14 +21,15 @@
 
 #define RUN_MODE 1
 
-//#define RFID_USE_I2C
+#define ARDUINO_AVR_MINI
+
+#ifndef ARDUINO_AVR_MINI
+#define HAS_SERIAL
+#endif
 
 #include <XBee.h>
-#include <sm130.h>
-#include <SoftwareSerial.h>
-#ifdef RFID_USE_I2C
 #include <Wire.h>
-#endif
+#include <sm130i2c.h>
 
 //Prototypes
 void send_to_xbee(Tx16Request*);
@@ -37,37 +38,55 @@ uint8_t get_rfid_tag(uint8_t *uid);
 void flashLed(int pin, int times, int wait);
 
 #if RUN_MODE != RFID_TEST_MODE
+#ifdef HAS_SERIAL
+#include <SoftwareSerial.h>
 SoftwareSerial xbeeSerial(10, 9);
+#else
+#define xbeeSerial Serial
+#endif
 XBee xbee = XBee();
 #endif
 
 #if RUN_MODE != XBEE_TEST_MODE
-#ifdef RFID_USE_I2C
-NFCReader nfc = NFCReader(NFC_I2C);
+SM130 nfc;
+#endif
+
+#ifdef ARDUINO_AVR_MINI
+int statusLed = 10;
+int errorLed = 11;
 #else
-SoftwareSerial rfid(7, 8);
-NFCReader nfc = NFCReader(NFC_UART);
-#endif
-#endif
-
-
 int statusLed = 5;
 int errorLed = 4;
-
-void setup() {
-  Serial.begin(19200);
-  delay(100);
-
-#if RUN_MODE == RFID_TEST_MODE
-  Serial.print("RFID TEST Mode");
-#elif RUN_MODE == XBEE_TEST_MODE
-  Serial.print("XBEE TEST Mode");
-#else
-  Serial.print("Normal Mode");
 #endif
 
+void debugPrint(const char *str) {
+#ifdef HAS_SERIAL
+  Serial.print(str);
+#endif
+}
+
+void debugPrintln(const char *str = "\0") {
+#ifdef HAS_SERIAL
+  Serial.print(str);
   Serial.println();
-  
+#endif
+}
+
+void setup() {
+  Wire.begin();
+
+#ifdef HAS_SERIAL
+  Serial.begin(115200);
+#endif
+
+#if RUN_MODE == RFID_TEST_MODE
+  debugPrintln("RFID TEST Mode");
+#elif RUN_MODE == XBEE_TEST_MODE
+  debugPrintln("XBEE TEST Mode");
+#else
+  debugPrintln("Normal Mode");
+#endif
+
   pinMode(statusLed, OUTPUT);
   pinMode(errorLed, OUTPUT);
 
@@ -77,17 +96,22 @@ void setup() {
   delay(100);
 #endif
 
-#if RUN_MODE != XBEE_TEST_MODE
-#ifdef RFID_USE_I2C
-  Wire.begin();
-  nfc.setSerial(Wire);
-#else
-  rfid.begin(19200);
-  nfc.setSerial(rfid);    
+#if RUN_MODE != RFID_TEST_MODE
+    uint8_t payload[] = { 'i', 'n', 'i', 't' };
+    Tx16Request tx = Tx16Request(0x0001, payload, sizeof(payload));
+    send_to_xbee(&tx);
 #endif
-  delay(100);
+
+#if RUN_MODE != XBEE_TEST_MODE
+
+  nfc.pinRESET = 0xFF;
+  nfc.pinDREADY = 0xFF;
+  //nfc.debug = true;
+  nfc.reset();
 
   get_rfid_version();
+  
+  nfc.seekTag();
 #endif
 
 }
@@ -104,70 +128,41 @@ void loop() {
 
     delay(1000);
 #else
-	uint8_t uid[9];
-	uint8_t tagResult = get_rfid_tag(uid);
-	if (tagResult == 1) {
-		Serial.print(uid[0], HEX);
-		Serial.print(uid[1], HEX);
-		Serial.print(uid[2], HEX);
-		Serial.print(uid[3], HEX);
-		Serial.println();
-
+  //nfc.selectTag();
+	if (nfc.available()) {
+    if (nfc.getTagType() != 0) {
+      debugPrint(nfc.getTagName());
+      debugPrint(": ");
+      debugPrintln(nfc.getTagString());      
 #if RUN_MODE != RFID_TEST_MODE
-		uint8_t payload[] = { uid[0], uid[1], uid[2], uid[3] };
-		Tx16Request tx = Tx16Request(0x0001, payload, sizeof(payload));
-
-		send_to_xbee(&tx);
+      Tx16Request tx = Tx16Request(0x0001, nfc.getTagNumber(), nfc.getTagLength());
+      send_to_xbee(&tx);
 #endif
-	}
-	else if (tagResult == 0x4E) {
-		//Serial.println("No Tag Present");
-	}
-	else {
-		Serial.print("Failed reading tag: ");
-		Serial.println(tagResult);
-	}
+    
+    }
 
-	delay(100);
+    nfc.seekTag();
+
+	}
 #endif
+
+	//delay(100);
 }
 
 void get_rfid_version()
 {
-<<<<<<< 4d3985eeb196c946b05e4e8373990deca64c178c
-	Serial.print("Firmware version: ");
-#ifndef RFID_USE_I2C
-  	rfid.listen();
-#endif
-	int len = 10;
-	uint8_t firmwareVersion[len];
-	nfc.getFirmwareVersion(firmwareVersion, len);
-	Serial.println((const char *)firmwareVersion);
-=======
-	//Serial.print("Firmware version: ");
-  rfid.listen();
-	int len = 10;
-	uint8_t firmwareVersion[len];
-	nfc.getFirmwareVersion(firmwareVersion, len);
-  //Serial.println((const char *)firmwareVersion);
-  Tx16Request tx = Tx16Request(0x0001, firmwareVersion, sizeof(firmwareVersion));
+  const char *firmwareVersion = nfc.getFirmwareVersion();
+	debugPrintln(firmwareVersion);
+#if RUN_MODE != RFID_TEST_MODE
+  Tx16Request tx = Tx16Request(0x0001, (uint8_t*)firmwareVersion, strlen(firmwareVersion));
   send_to_xbee(&tx);
->>>>>>> updates
-}
-
-uint8_t get_rfid_tag(uint8_t *uid)
-{
-#ifndef RFID_USE_I2C
-	rfid.listen(); // uno cannot listen to 2 ports at same time.
 #endif
-	uint8_t length;
-	return nfc.readTagID(uid, &length);
 }
 
 #if RUN_MODE != RFID_TEST_MODE
 void send_to_xbee(Tx16Request* tx)
 {
-	xbeeSerial.listen(); // uno cannot listen to 2 ports at same time.
+	//xbeeSerial.listen(); // uno cannot listen to 2 ports at same time.
 
 	xbee.send(*tx);
 
