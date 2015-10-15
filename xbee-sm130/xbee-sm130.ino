@@ -25,6 +25,9 @@
 
 #ifndef ARDUINO_AVR_MINI
 #define HAS_SERIAL
+#define XBEE_RATE 115200
+#else
+#define XBEE_RATE 19200
 #endif
 
 #include <XBee.h>
@@ -91,7 +94,7 @@ void setup() {
   pinMode(errorLed, OUTPUT);
 
 #if RUN_MODE != RFID_TEST_MODE
-  xbeeSerial.begin(19200);
+  xbeeSerial.begin(XBEE_RATE);
   xbee.setSerial(xbeeSerial);
   delay(100);
 #endif
