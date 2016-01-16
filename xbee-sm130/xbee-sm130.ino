@@ -21,7 +21,7 @@
 
 #define RUN_MODE 1
 
-#define ARDUINO_AVR_MINI
+//#define ARDUINO_AVR_MINI
 
 #ifndef ARDUINO_AVR_MINI
 #define HAS_SERIAL
@@ -34,10 +34,16 @@
 #include <Wire.h>
 #include <sm130i2c.h>
 
+#define XBEE_MASTER 0x0001
+
+#define TEST_MSG 't'
+#define TAGNUMBER_MSG 'n'
+#define FIRMWARE_MSG 'f'
+#define PING_MSG 'p'
+
 //Prototypes
-void send_to_xbee(Tx16Request*);
+void send_to_xbee(int destinationAddr, uint8_t cmd, uint8_t* data, size_t dataLen);
 void get_rfid_version();
-uint8_t get_rfid_tag(uint8_t *uid);
 void flashLed(int pin, int times, int wait);
 
 #if RUN_MODE != RFID_TEST_MODE
@@ -99,12 +105,6 @@ void setup() {
   delay(100);
 #endif
 
-#if RUN_MODE != RFID_TEST_MODE
-    uint8_t payload[] = { 'i', 'n', 'i', 't' };
-    Tx16Request tx = Tx16Request(0x0001, payload, sizeof(payload));
-    send_to_xbee(&tx);
-#endif
-
 #if RUN_MODE != XBEE_TEST_MODE
 
   nfc.pinRESET = 0xFF;
@@ -121,13 +121,8 @@ void setup() {
 
 void loop() {
 #if RUN_MODE == XBEE_TEST_MODE
-    uint8_t payload[] = { 'a', 'b', 'c', 'd' };
-    Tx16Request tx = Tx16Request(0x0002, payload, sizeof(payload));
-    send_to_xbee(&tx);
-
-    uint8_t payload2[] = { 'e', 'f', 'g', 'h' };
-    Tx16Request tx2 = Tx16Request(0x0001, payload2, sizeof(payload));
-    send_to_xbee(&tx2);
+    uint8_t payload2[] = { 't', 'e', 's', 't' };
+    send_to_xbee(XBEE_MASTER, TEST_MSG, payload2, sizeof(payload));
 
     delay(1000);
 #else
@@ -138,8 +133,7 @@ void loop() {
       debugPrint(": ");
       debugPrintln(nfc.getTagString());      
 #if RUN_MODE != RFID_TEST_MODE
-      Tx16Request tx = Tx16Request(0x0001, nfc.getTagNumber(), nfc.getTagLength());
-      send_to_xbee(&tx);
+      send_to_xbee(XBEE_MASTER, TAGNUMBER_MSG, nfc.getTagNumber(), nfc.getTagLength());
 #endif
     
     }
@@ -154,20 +148,24 @@ void loop() {
 
 void get_rfid_version()
 {
-  const char *firmwareVersion = nfc.getFirmwareVersion();
+	const char *firmwareVersion = nfc.getFirmwareVersion();
 	debugPrintln(firmwareVersion);
 #if RUN_MODE != RFID_TEST_MODE
-  Tx16Request tx = Tx16Request(0x0001, (uint8_t*)firmwareVersion, strlen(firmwareVersion));
-  send_to_xbee(&tx);
+	send_to_xbee(XBEE_MASTER, FIRMWARE_MSG, (uint8_t*)firmwareVersion, strlen(firmwareVersion));
 #endif
 }
 
 #if RUN_MODE != RFID_TEST_MODE
-void send_to_xbee(Tx16Request* tx)
+void send_to_xbee(int destinationAddr, uint8_t cmd, uint8_t* data, size_t dataLen)
 {
 	//xbeeSerial.listen(); // uno cannot listen to 2 ports at same time.
 
-	xbee.send(*tx);
+	uint8_t dataPacket[dataLen+1];
+	dataPacket[0] = cmd;
+	memcpy(dataPacket+1, data, dataLen);
+	Tx16Request tx(destinationAddr, dataPacket, dataLen+1);
+	
+	xbee.send(tx);
 
 	// flash TX indicator
 	flashLed(statusLed, 1, 200);

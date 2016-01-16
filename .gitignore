@@ -1,1 +1,3 @@
 *.orig
+__vm
+*.vcxproj.filters
